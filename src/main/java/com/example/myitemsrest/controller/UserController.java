@@ -1,19 +1,23 @@
 package com.example.myitemsrest.controller;
 
-import com.example.myitemsrest.dto.SaveUserRequest;
-import com.example.myitemsrest.dto.UserResponseDto;
+import com.example.myitemsrest.dto.*;
 import com.example.myitemsrest.entity.Role;
 import com.example.myitemsrest.entity.User;
 import com.example.myitemsrest.repository.UserRepository;
+import com.example.myitemsrest.security.CurrentUser;
+import com.example.myitemsrest.util.JwtTokenUtil;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -21,54 +25,94 @@ public class UserController {
 
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenUtil jwtTokenUtil;
+    private final RestTemplate restTemplate;
+
+    @Value("${myitems.cb.url}")
+    private String cbUrl;
+
+    @PostMapping("/users/auth")
+    public ResponseEntity<UserLoginResponse> userLogin(@RequestBody UserLoginRequest userLoginRequest) {
+        if (userLoginRequest.getEmail() != null && !userLoginRequest.getEmail().equals("")) {
+            Optional<User> byEmail = userRepository.findByEmail(userLoginRequest.getEmail());
+            if (byEmail.isEmpty() || !passwordEncoder.matches(userLoginRequest.getPassword(), byEmail.get().getPassword())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            return ResponseEntity.ok(new UserLoginResponse(jwtTokenUtil.generateToken(byEmail.get().getEmail())));
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
 
     @GetMapping("/users/{id}")
     public UserResponseDto getUserById(@PathVariable("id") int id) {
+
+        ResponseEntity<University[]> forEntity = restTemplate.getForEntity("http://universities.hipolabs.com/search?country=Armenia", University[].class);
+        University[] universities = forEntity.getBody();
+//        List<University> universityList = Arrays.asList(universities);
+        for (University university : universities) {
+            System.out.println(university);
+        }
         return modelMapper.map(userRepository.getById(id), UserResponseDto.class);
     }
 
     @GetMapping("/users/")
-    public List<UserResponseDto> getUsers() {
+    @CrossOrigin(origins = "http://localhost:8080")
+    public List<UserResponseDto> getUsers(@AuthenticationPrincipal CurrentUser currentUser) {
+        System.out.println(currentUser.getUser().getName());
         List<UserResponseDto> result = new ArrayList<>();
         for (User user : userRepository.findAll()) {
-             result.add(modelMapper.map(user, UserResponseDto.class));
+            result.add(modelMapper.map(user, UserResponseDto.class));
         }
         return result;
     }
 
     @PostMapping("/users/")
-    public UserResponseDto saveUser(@RequestBody SaveUserRequest saveUserRequest){
+    public @ResponseBody
+    UserResponseDto saveUser(@RequestBody SaveUserRequest saveUserRequest,
+                             @RequestHeader("platform") String platform) {
         User user = modelMapper.map(saveUserRequest, User.class);
         user.setRole(Role.USER);
-        user.setActive(false);
-        user.setToken(UUID.randomUUID().toString());
-        user.setTokenCreatedDate(LocalDateTime.now());
+        user.setPassword(passwordEncoder.encode(saveUserRequest.getPassword()));
+
+        String rubCurrencyUrl = cbUrl ;
+        ResponseEntity<HashMap> rubCurrency = restTemplate.getForEntity(rubCurrencyUrl, HashMap.class);
+        HashMap<String, String> currencyMap = rubCurrency.getBody();
+        if (currencyMap != null) {
+            String rub = currencyMap.get("RUB");
+            System.out.println(rub);
+        }
         userRepository.save(user);
         return modelMapper.map(user, UserResponseDto.class);
     }
 
     @PutMapping("/users/{id}")
-    public UserResponseDto updateUser(@RequestBody SaveUserRequest saveUserRequest,
-                                        @PathVariable("id") int id){
-        User byId = userRepository.getById(id);
+    public ResponseEntity<UserResponseDto> updateUser(@RequestBody SaveUserRequest saveUserRequest,
+                                                      @PathVariable("id") int id) {
+        Optional<User> user = userRepository.findById(id);
+        if (!user.isPresent()) {
+            return ResponseEntity.notFound().build();
+        }
+        User byId = user.get();
         if (saveUserRequest.getEmail() != null) {
             byId.setEmail(saveUserRequest.getEmail());
         }
-        if(saveUserRequest.getName() != null){
+        if (saveUserRequest.getName() != null) {
             byId.setName(saveUserRequest.getName());
         }
-        if(saveUserRequest.getSurname() != null){
+        if (saveUserRequest.getSurname() != null) {
             byId.setSurname(saveUserRequest.getSurname());
         }
-        if(saveUserRequest.getPassword() != null){
+        if (saveUserRequest.getPassword() != null) {
             byId.setPassword(saveUserRequest.getPassword());
         }
         userRepository.save(byId);
-        return modelMapper.map(byId, UserResponseDto.class);
+        UserResponseDto userResponseDto = modelMapper.map(byId, UserResponseDto.class);
+        return ResponseEntity.ok(userResponseDto);
     }
 
     @DeleteMapping("/users/{id}")
-    public ResponseEntity deleteById(@PathVariable("id") int id){
+    public ResponseEntity deleteById(@PathVariable("id") int id) {
         if (userRepository.existsById(id)) {
             userRepository.deleteById(id);
             return ResponseEntity.noContent().build();
