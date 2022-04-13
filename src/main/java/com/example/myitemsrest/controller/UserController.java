@@ -69,12 +69,15 @@ public class UserController {
 
     @PostMapping("/users/")
     public @ResponseBody
-    UserResponseDto saveUser(@RequestBody SaveUserRequest saveUserRequest,
-                             @RequestHeader("platform") String platform) {
+    ResponseEntity<UserResponseDto> saveUser(@RequestBody SaveUserRequest saveUserRequest,
+                             @RequestHeader(value = "platform", required = false) String platform) {
         User user = modelMapper.map(saveUserRequest, User.class);
         user.setRole(Role.USER);
         user.setPassword(passwordEncoder.encode(saveUserRequest.getPassword()));
 
+        if(userRepository.findByEmail(saveUserRequest.getEmail()).isPresent()){
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
         String rubCurrencyUrl = cbUrl ;
         ResponseEntity<HashMap> rubCurrency = restTemplate.getForEntity(rubCurrencyUrl, HashMap.class);
         HashMap<String, String> currencyMap = rubCurrency.getBody();
@@ -82,8 +85,9 @@ public class UserController {
             String rub = currencyMap.get("RUB");
             System.out.println(rub);
         }
+
         userRepository.save(user);
-        return modelMapper.map(user, UserResponseDto.class);
+        return ResponseEntity.ok(modelMapper.map(user, UserResponseDto.class));
     }
 
     @PutMapping("/users/{id}")
