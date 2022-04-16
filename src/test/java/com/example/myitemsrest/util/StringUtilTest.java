@@ -1,15 +1,22 @@
 package com.example.myitemsrest.util;
 
 import org.junit.jupiter.api.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
 
+@RunWith(MockitoJUnitRunner.class)
 class StringUtilTest {
 
-    private StringUtil stringUtil = new StringUtil();
+    private StringUtil stringUtil = Mockito.mock(StringUtil.class);
 
     @Test
     void trim() {
+        when(stringUtil.trim("  poxos ")).thenReturn("p");
+
         String trim = stringUtil.trim("  poxos ");
         assertEquals("poxos", trim);
     }

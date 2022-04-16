@@ -7,7 +7,10 @@ import com.example.myitemsrest.repository.UserRepository;
 import com.example.myitemsrest.security.CurrentUser;
 import com.example.myitemsrest.util.JwtTokenUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -21,6 +24,7 @@ import java.util.*;
 
 @RestController
 @RequiredArgsConstructor
+@Slf4j
 public class UserController {
 
     private final UserRepository userRepository;
@@ -35,10 +39,13 @@ public class UserController {
     @PostMapping("/users/auth")
     public ResponseEntity<UserLoginResponse> userLogin(@RequestBody UserLoginRequest userLoginRequest) {
         if (userLoginRequest.getEmail() != null && !userLoginRequest.getEmail().equals("")) {
+            log.info(userLoginRequest.getEmail() + " wants to get a token");
             Optional<User> byEmail = userRepository.findByEmail(userLoginRequest.getEmail());
             if (byEmail.isEmpty() || !passwordEncoder.matches(userLoginRequest.getPassword(), byEmail.get().getPassword())) {
+                log.warn("passwords are not matching for user: " + userLoginRequest.getEmail());
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
+            log.info("user with email: {} get the token", userLoginRequest.getEmail());
             return ResponseEntity.ok(new UserLoginResponse(jwtTokenUtil.generateToken(byEmail.get().getEmail())));
         }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
