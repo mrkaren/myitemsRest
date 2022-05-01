@@ -3,8 +3,10 @@ package com.example.myitemsrest.controller;
 import com.example.myitemsrest.dto.*;
 import com.example.myitemsrest.entity.Role;
 import com.example.myitemsrest.entity.User;
+import com.example.myitemsrest.repository.CustomUserRepo;
 import com.example.myitemsrest.repository.UserRepository;
 import com.example.myitemsrest.security.CurrentUser;
+import com.example.myitemsrest.service.CurrencyService;
 import com.example.myitemsrest.util.JwtTokenUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,9 @@ public class UserController {
     private final JwtTokenUtil jwtTokenUtil;
     private final RestTemplate restTemplate;
 
+    private final CurrencyService currencyService;
+
+    private final CustomUserRepo customUserRepo;
     @Value("${myitems.cb.url}")
     private String cbUrl;
 
@@ -65,10 +70,9 @@ public class UserController {
 
     @GetMapping("/users/")
     @CrossOrigin(origins = "http://localhost:8080")
-    public List<UserResponseDto> getUsers(@AuthenticationPrincipal CurrentUser currentUser) {
-        System.out.println(currentUser.getUser().getName());
+    public List<UserResponseDto> getUsers(@AuthenticationPrincipal CurrentUser currentUser, @RequestBody UserFilterDto userFilterDto) {
         List<UserResponseDto> result = new ArrayList<>();
-        for (User user : userRepository.findAll()) {
+        for (User user : customUserRepo.users(userFilterDto)) {
             result.add(modelMapper.map(user, UserResponseDto.class));
         }
         return result;
@@ -85,14 +89,11 @@ public class UserController {
         if(userRepository.findByEmail(saveUserRequest.getEmail()).isPresent()){
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
-        String rubCurrencyUrl = cbUrl ;
-        ResponseEntity<HashMap> rubCurrency = restTemplate.getForEntity(rubCurrencyUrl, HashMap.class);
-        HashMap<String, String> currencyMap = rubCurrency.getBody();
-        if (currencyMap != null) {
-            String rub = currencyMap.get("RUB");
+        HashMap<String, String> currencies = currencyService.getCurrencies();
+        if(currencies != null){
+            String rub = currencies.get("RUB");
             System.out.println(rub);
         }
-
         userRepository.save(user);
         return ResponseEntity.ok(modelMapper.map(user, UserResponseDto.class));
     }
